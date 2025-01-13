@@ -8,6 +8,7 @@
 #include "nvapriltags/include/nvAprilTags.h"
 
 // Standard library and utility includes
+#include <cmath> 
 #include <iostream>
 #include <fstream>
 #include <string.h>
@@ -78,6 +79,29 @@ struct AprilTagsImpl {
     }
 };
 
+double computePoseAmbiguity(const vector<Point3f>& objectPoints, 
+                            const vector<Point2f>& imagePoints,
+                            const Mat& cameraMatrix, const Mat& distCoeffs,
+                            const Mat& rvec1, const Mat& tvec1,
+                            const Mat& rvec2, const Mat& tvec2) {
+    
+    vector<Point2f> projectedPoints1, projectedPoints2;
+
+    // Project object points onto the image plane for both pose candidates
+    cv::projectPoints(objectPoints, rvec1, tvec1, cameraMatrix, distCoeffs, projectedPoints1);
+    cv::projectPoints(objectPoints, rvec2, tvec2, cameraMatrix, distCoeffs, projectedPoints2);
+
+    double error1 = 0.0, error2 = 0.0;
+
+    // Compute sum of squared differences for both pose candidates
+    for (size_t i = 0; i < imagePoints.size(); i++) {
+        error1 += pow(imagePoints[i].x - projectedPoints1[i].x, 2) + pow(imagePoints[i].y - projectedPoints1[i].y, 2);
+        error2 += pow(imagePoints[i].x - projectedPoints2[i].x, 2) + pow(imagePoints[i].y - projectedPoints2[i].y, 2);
+    }
+
+    return fabs(error1 - error2); // Return absolute difference as ambiguity value
+}
+
 void roborioSender(const std::vector<std::array<float, 8>> &sendData, int sock) {
     if (sendData.empty()) {
         std::cout << "No data to send." << std::endl;
@@ -132,8 +156,10 @@ std::array<float, 8> getPose(std::vector<cv::Point2d> imagePts, int TagId){
     cv::Mat distortionMatrix(1, 5, CV_32F, distCoeffs);
 
     cv::Mat rvec, tvec;
+
     bool success = cv::solvePnPRansac(cvApriltagPts, imagePts, cameraMatrix, distortionMatrix, rvec, tvec, false, 10000000000, 4.0f, .99, cv::noArray(), cv::SOLVEPNP_IPPE_SQUARE);
     cv::solvePnPRefineLM(cvApriltagPts, imagePts, cameraMatrix, distortionMatrix, rvec, tvec);
+
     if (!success){
     std::cerr << "Error with SOLVEPNP" << "\n";
         return lastValidPose;
