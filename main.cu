@@ -204,7 +204,6 @@ void captureThread() {
             frame_queue.pop();
         }
 
-       
         frame_queue.push(new_frame);
         frame_queue_cond.notify_one();
 
@@ -215,7 +214,8 @@ void captureThread() {
 
 void processingThread(AprilTagsImpl *impl_, int roborioSock) { 
     std::vector<std::array<float, 8>> finalToSend;
-    while (true) {
+    while (capture.isOpened()) {
+        auto start = std::chrono::steady_clock::now(); 
         std::unique_lock<std::mutex> lock(frame_queue_mutex);
         frame_queue_cond.wait(lock, []{ return !frame_queue.empty(); });
         
@@ -227,7 +227,6 @@ void processingThread(AprilTagsImpl *impl_, int roborioSock) {
             break;
         }
 
-       
         cv::cvtColor(local_frame, img_rgba8, cv::COLOR_BGR2RGBA);
 
         auto frame_end = std::chrono::steady_clock::now();
