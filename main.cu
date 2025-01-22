@@ -72,29 +72,6 @@ struct AprilTagsImpl {
     }
 };
 
-double computePoseAmbiguity(const vector<Point3f>& objectPoints, 
-                            const vector<Point2f>& imagePoints,
-                            const Mat& cameraMatrix, const Mat& distCoeffs,
-                            const Mat& rvec1, const Mat& tvec1,
-                            const Mat& rvec2, const Mat& tvec2) {
-    
-    vector<Point2f> projectedPoints1, projectedPoints2;
-
-    // Project object points onto the image plane for both pose candidates
-    cv::projectPoints(objectPoints, rvec1, tvec1, cameraMatrix, distCoeffs, projectedPoints1);
-    cv::projectPoints(objectPoints, rvec2, tvec2, cameraMatrix, distCoeffs, projectedPoints2);
-
-    double error1 = 0.0, error2 = 0.0;
-
-    // Compute sum of squared differences for both pose candidates
-    for (size_t i = 0; i < imagePoints.size(); i++) {
-        error1 += pow(imagePoints[i].x - projectedPoints1[i].x, 2) + pow(imagePoints[i].y - projectedPoints1[i].y, 2);
-        error2 += pow(imagePoints[i].x - projectedPoints2[i].x, 2) + pow(imagePoints[i].y - projectedPoints2[i].y, 2);
-    }
-
-    return fabs(error1 - error2); // Return absolute difference as ambiguity value
-}
-
 void roborioSender(const std::vector<std::array<float, 8>> &sendData, int sock) {
     if (sendData.empty()) {
         std::cout << "No data to send." << std::endl;
@@ -195,16 +172,23 @@ void captureThread() {
     while (capture.isOpened()) {
         cv::Mat new_frame;
         capture >> new_frame;
+
         if (new_frame.empty()) {
             break;
         }
+        
+        cv::Mat downscaled_frame;
+        cv::resize(new_frame, downscaled_frame, 
+                   cv::Size(new_frame.cols / 2, new_frame.rows / 2), 
+                   0, 0, cv::INTER_AREA);
 
+        
         std::unique_lock<std::mutex> lock(frame_queue_mutex);
         if (frame_queue.size() >= MAX_QUEUE_SIZE) {
             frame_queue.pop();
         }
 
-        frame_queue.push(new_frame);
+        frame_queue.push(downscaled_frame);
         frame_queue_cond.notify_one();
 
         lock.unlock();
@@ -311,9 +295,15 @@ int main() {
     capture.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
     capture.set(cv::CAP_PROP_FRAME_WIDTH, 1260);
     capture.set(cv::CAP_PROP_FRAME_HEIGHT, 980);
+
     capture >> frame;
-    //cv::resize(frame, frame, cv::Size(frame.cols / 2, frame.rows / 2), 0, 0, cv::INTER_LINEAR);
-    cv::cvtColor(frame, img_rgba8, cv::COLOR_BGR2RGBA);
+    
+    cv::Mat downscaled_frame;
+    cv::resize(frame, downscaled_frame, 
+               cv::Size(frame.cols / 2, frame.rows / 2), 
+               0, 0, cv::INTER_AREA);
+    cv::cvtColor(downscaled_frame, img_rgba8, cv::COLOR_BGR2RGBA);
+
     auto *impl_ = new AprilTagsImpl();
     impl_->initialize(img_rgba8.cols, img_rgba8.rows,
                       img_rgba8.total() * img_rgba8.elemSize(),  img_rgba8.step, .1651f, 4);
