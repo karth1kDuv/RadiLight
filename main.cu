@@ -284,7 +284,11 @@ void processingThread(AprilTagsImpl *impl_, int roborioSock) {
     }
 }
 
+#include "ntcore.h"
+
 int main() {
+    NT_Inst inst = nt::GetDefaultInstance(); // This should now work!!
+
     int roborioSock = ::socket(AF_INET, SOCK_DGRAM, 0);
     capture.open(0, cv::CAP_V4L2);
     capture.set(cv::CAP_PROP_FPS, 90);
